@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Action Potential Interactive Learning</title>
+    <!-- โหลด Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- โหลด Three.js และ OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    
+    <style>
+        body { background-color: #050510; scroll-behavior: smooth; color: #f8fafc; }
+        
+        /* ปรับแต่ง Simulator Container */
+        #simulator-container { 
+            width: 100%; 
+            height: 75vh; 
+            position: relative; 
+            border-radius: 1.5rem; 
+            overflow: hidden; 
+            background: radial-gradient(circle at center, #111827 0%, #050510 100%);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #three-canvas { width: 100%; height: 100%; outline: none; }
+        
+        .pointer-events-auto { pointer-events: auto; }
+        
+        /* สไตล์สำหรับจุด Marker */
+        .marker {
+            position: absolute;
+            transform: translate(-50%, -50%);
+            width: 32px;
+            height: 32px;
+            background: rgba(245, 158, 11, 0.4);
+            border: 2px solid #fbbf24;
+            color: #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            font-size: 0.9rem;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            box-shadow: 0 0 10px rgba(245, 158, 11, 0.4);
+            transition: all 0.3s ease;
+            z-index: 20;
+        }
+
+        .marker:hover {
+            background: rgba(245, 158, 11, 0.9);
+            transform: translate(-50%, -50%) scale(1.15);
+        }
+        .marker.active {
+            background: #ef4444;
+            border-color: #fca5a5;
+            box-shadow: 0 0 20px rgba(239, 68, 68, 0.8);
+        }
+
+        /* Glassmorphism Panels */
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.8);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: rgba(255,255,255,0.05); }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(245, 158, 11, 0.3); border-radius: 10px; }
+
+        @keyframes fadeInSlide {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .animate-fade-in { animation: fadeInSlide 0.5s ease-out forwards; }
+    </style>
+</head>
+<body class="font-sans selection:bg-yellow-500/30">
+
+    <!-- แถบนำทาง (Navbar) -->
+    <nav class="sticky top-0 z-[100] glass-panel border-b border-white/10 px-6 py-4">
+        <div class="max-w-7xl mx-auto flex justify-between items-center">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-gradient-to-tr from-yellow-500 to-orange-500 rounded-xl flex items-center justify-center shadow-lg shadow-orange-500/20">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                </div>
+                <div>
+                    <span class="text-xl font-bold tracking-tight block text-white">Action Potential Lab</span>
+                    <span class="text-[10px] uppercase tracking-widest text-orange-400 font-bold">Interactive Biology</span>
+                </div>
+            </div>
+            <div class="hidden md:flex gap-8 text-sm font-medium text-slate-400">
+                <a href="#simulator" class="hover:text-yellow-400 transition">Simulator</a>
+                <a href="#theory" class="hover:text-yellow-400 transition">Theory</a>
+                <a href="#summary" class="hover:text-yellow-400 transition">Summary</a>
+            </div>
+            <button class="bg-white/5 hover:bg-white/10 border border-white/10 px-5 py-2 rounded-full text-xs font-bold transition flex items-center gap-2">
+                <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                LIVE MODE
+            </button>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 md:px-6 py-12">
+        
+        <!-- ส่วน Simulator -->
+        <section id="simulator" class="mb-24">
+            <div class="flex flex-col md:flex-row justify-between items-end gap-6 mb-8">
+                <div class="max-w-2xl">
+                    <h2 class="text-4xl font-extrabold mb-3 text-white">3D Neural Simulator</h2>
+                    <p class="text-slate-400 leading-relaxed italic border-l-4 border-yellow-500 pl-4">
+                        จำลองกระบวนการเปลี่ยนแปลงศักย์ไฟฟ้าที่เยื่อหุ้มเซลล์ประสาท 
+                        ศึกษาการทำงานของประตูไอออน, Leak Channels และ Na<sup>+</sup>/K<sup>+</sup> Pump
+                    </p>
+                </div>
+                <div class="flex flex-wrap gap-2 justify-end">
+                    <div class="bg-blue-500/20 text-blue-400 px-3 py-1 rounded-md text-[10px] font-bold border border-blue-500/30">Na<sup>+</sup> CHANNEL</div>
+                    <div class="bg-purple-500/20 text-purple-400 px-3 py-1 rounded-md text-[10px] font-bold border border-purple-500/30">K<sup>+</sup> CHANNEL</div>
+                    <div class="bg-orange-500/20 text-orange-400 px-3 py-1 rounded-md text-[10px] font-bold border border-orange-500/30">Na<sup>+</sup>/K<sup>+</sup> PUMP</div>
+                </div>
+            </div>
+
+            <div id="simulator-container" class="group shadow-2xl">
+                <div id="three-canvas"></div>
+                
+                <!-- UI Overlay ภายใน Simulator -->
+                <div class="absolute inset-0 pointer-events-none">
+                    <!-- Labels -->
+                    <div id="stimulus-label" class="absolute text-cyan-300 font-bold text-[10px] md:text-xs bg-slate-900/90 px-2 py-1.5 rounded-lg border border-cyan-500/30 shadow-lg">👇 สิ่งเร้า (Stimulus)</div>
+                    <div id="skin-label" class="absolute text-orange-300 font-bold text-[10px] md:text-xs bg-slate-900/90 px-2 py-1.5 rounded-lg border border-orange-500/30 shadow-lg">ผิวหนัง (Receptors)</div>
+
+                    <!-- Marker Container -->
+                    <div id="markers-container" class="pointer-events-auto"></div>
+
+                    <!-- Info Panel (ขวาล่าง) -->
+                    <div id="info-panel" class="absolute bottom-6 right-6 left-6 md:left-auto md:w-[420px] glass-panel p-6 rounded-2xl pointer-events-auto hidden animate-fade-in z-[100] border-l-4 border-l-orange-500">
+                        <div class="flex items-center gap-4 mb-4">
+                            <div id="info-number" class="w-12 h-12 rounded-full bg-gradient-to-br from-orange-500 to-yellow-500 text-white flex items-center justify-center text-2xl font-bold shadow-lg shrink-0">1</div>
+                            <div>
+                                <h2 id="info-title" class="text-xl font-bold text-white leading-tight">ระยะพัก</h2>
+                                <p id="info-mv" class="text-yellow-400 font-mono text-xs mt-1 font-bold">VOLTAGE: -70 mV</p>
+                            </div>
+                        </div>
+                        <div id="info-desc" class="text-slate-300 leading-relaxed text-sm max-h-[35vh] overflow-y-auto pr-3 custom-scrollbar">
+                            คำอธิบายจะปรากฏที่นี่...
+                        </div>
+                        <button onclick="closeInfo()" class="absolute top-4 right-4 text-slate-400 hover:text-white p-1 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ส่วนเนื้อหาทางทฤษฎี -->
+        <section id="theory" class="mb-24 pt-12 border-t border-white/10">
+            <h2 class="text-4xl font-bold mb-12 text-center bg-clip-text text-transparent bg-gradient-to-b from-white to-slate-500">How Action Potential Works</h2>
+            
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <!-- Phase 1 -->
+                <div class="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition cursor-default group">
+                    <div class="text-orange-500 font-black text-5xl mb-4 opacity-20 group-hover:opacity-100 transition text-white">01</div>
+                    <h3 class="text-xl font-bold mb-3 text-orange-400">Resting State & Skin Receptors</h3>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        รักษาระดับสมดุลที่ <strong>-70 mV</strong> โดยผิวหนัง (Skin) ทำหน้าที่เป็นหน่วยรับความรู้สึก (Sensory Receptor) รอรับสิ่งเร้าเพื่อเริ่มกระบวนการ
+                    </p>
+                </div>
+                <!-- Phase 2 -->
+                <div class="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition cursor-default group">
+                    <div class="text-yellow-500 font-black text-5xl mb-4 opacity-20 group-hover:opacity-100 transition text-white">02</div>
+                    <h3 class="text-xl font-bold mb-3 text-yellow-400">Sensory Stimulus</h3>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        เมื่อผิวหนังถูกกระตุ้น ช่อง Na<sup>+</sup> จะเริ่มเปิดออก หากศักย์ไฟฟ้าแตะระดับ <strong>-55 mV (Threshold)</strong> จะเกิด Action Potential ทันที
+                    </p>
+                </div>
+                <!-- Phase 3 -->
+                <div class="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition cursor-default group border-t-cyan-500/50">
+                    <div class="text-cyan-500 font-black text-5xl mb-4 opacity-20 group-hover:opacity-100 transition text-white">03</div>
+                    <h3 class="text-xl font-bold mb-3 text-cyan-400">Rising Phase</h3>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        Positive Feedback ของ Na<sup>+</sup> ทำให้แรงดันพุ่งสูงเกิน 0 mV สู่จุด Peak ที่ประมาณ +35 mV
+                    </p>
+                </div>
+                <!-- Phase 4 -->
+                <div class="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition cursor-default group">
+                    <div class="text-purple-500 font-black text-5xl mb-4 opacity-20 group-hover:opacity-100 transition text-white">04</div>
+                    <h3 class="text-xl font-bold mb-3 text-purple-400">Falling Phase</h3>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        ช่อง Na<sup>+</sup> ปิดลงและช่อง K<sup>+</sup> เปิดออก ปล่อยประจุบวกออกนอกเซลล์เพื่อรีเซ็ตศักย์ไฟฟ้าเป็นลบ
+                    </p>
+                </div>
+                <!-- Phase 5 -->
+                <div class="bg-white/5 border border-white/10 p-8 rounded-3xl hover:bg-white/10 transition cursor-default group">
+                    <div class="text-green-500 font-black text-5xl mb-4 opacity-20 group-hover:opacity-100 transition text-white">05</div>
+                    <h3 class="text-xl font-bold mb-3 text-green-400">Hyperpolarization</h3>
+                    <p class="text-sm text-slate-400 leading-relaxed">
+                        K<sup>+</sup> ไหลออกมากเกินไปทำให้แรงดันดิ่งลงต่ำกว่าระยะพัก ก่อนที่ปั๊มและ Leak channel จะปรับสู่สมดุลเดิม
+                    </p>
+                </div>
+                <!-- Pump Summary -->
+                <div class="bg-gradient-to-br from-blue-500/20 to-purple-500/20 border border-blue-500/20 p-8 rounded-3xl flex flex-col justify-center text-center">
+                    <p class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-2">Essential Mechanism</p>
+                    <p class="text-sm text-slate-300">Na<sup>+</sup>/K<sup>+</sup> Pump รักษาชีวิตเซลล์โดยการแลกเปลี่ยน <strong>3 Na<sup>+</sup> ออก : 2 K<sup>+</sup> เข้า</strong></p>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="border-t border-white/5 py-12 px-6 bg-black/50 text-center md:text-left">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8">
+            <div class="flex flex-col items-center md:items-start gap-2">
+                <div class="flex items-center gap-2">
+                    <div class="w-6 h-6 bg-yellow-500 rounded flex items-center justify-center font-bold text-black text-[10px]">A</div>
+                    <span class="font-bold text-white">Action Potential Lab</span>
+                </div>
+                <p class="text-[10px] text-slate-500">© 2024 Biological Interactive Simulation. Educational purposes only.</p>
+            </div>
+            <div class="flex gap-6 text-xs font-medium text-slate-400">
+                <a href="#" class="hover:text-white transition">Simulator</a>
+                <a href="#" class="hover:text-white transition">Theory</a>
+                <a href="#" class="hover:text-white transition">Terms</a>
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // --- ฐานข้อมูล 5 ระยะ ---
+        const phasesData = [
+            {
+                id: 1, title: "ระยะพัก (Resting State)", mv: "-70 mV", naGate: 0, kGate: 0, pumpActive: 1,
+                desc: `<p class="mb-3"><strong class="text-white">สถานะ:</strong> <span class="text-emerald-400">Na<sup>+</sup>/K<sup>+</sup> Pump ทำงานตลอดเวลา</span> เพื่อรักษาความต่างศักย์ที่ -70 mV</p><p class="mb-3"><strong class="text-white">กลไก:</strong> ปั๊ม Na<sup>+</sup> ออก 3 และดึง K<sup>+</sup> เข้า 2 ตัวโดยใช้พลังงาน ATP</p>`
+            },
+            {
+                id: 2, title: "การกระตุ้นที่ผิวหนัง (Sensory Stimulus)", mv: "Threshold ที่ -55 mV", naGate: 0.3, kGate: 0, pumpActive: 1,
+                desc: `<p class="mb-3"><strong class="text-white">หน่วยรับความรู้สึก:</strong> เริ่มมี Na<sup>+</sup> รั่วเข้าสู่เซลล์ แต่ <span class="text-emerald-400">Pump ยังทำงานสม่ำเสมอ</span></p><p class="mb-3"><strong class="text-white">กลไก:</strong> หากแรงกระตุ้นถึง -55 mV จะเข้าสู่ระยะ Rising Phase ทันที</p>`
+            },
+            {
+                id: 3, title: "ระยะพลุ่งขึ้น (Rising Phase)", mv: "Peak ที่ +35 mV", naGate: 1.0, kGate: 0, pumpActive: 1,
+                desc: `<p class="mb-3"><strong class="text-white">Depolarization:</strong> Na<sup>+</sup> ไหลทะลักเข้าอย่างรวดเร็ว <span class="text-emerald-400">(Pump ยังคงทำงานอยู่ตลอด)</span></p><p class="mb-3"><strong class="text-white">กลไก:</strong> แรงดันไฟฟ้าพุ่งสูงขึ้นเป็นบวกสวนทางกับระยะพัก</p>`
+            },
+            {
+                id: 4, title: "ระยะตกลง (Falling / Repolarization)", mv: "ลดระดับกลับสู่ค่าลบ", naGate: 0, kGate: 1.0, pumpActive: 1,
+                desc: `<p class="mb-3"><strong class="text-white">Repolarization:</strong> K<sup>+</sup> ไหลออกนอกเซลล์เพื่อรีเซ็ตประจุ <span class="text-emerald-400">(Pump ยังทำงานปกติ)</span></p><p><strong class="text-white">กลไก:</strong> ช่อง Na<sup>+</sup> ปิด และช่อง K<sup>+</sup> เปิดออกเต็มที่</p>`
+            },
+            {
+                id: 5, title: "ระยะต่ำกว่าปกติ (Undershoot)", mv: "Under -70 mV", naGate: 0, kGate: 0.5, pumpActive: 1,
+                desc: `<p class="mb-3"><strong class="text-white">Hyperpolarization:</strong> ศักย์ไฟฟ้าดิ่งลงต่ำกว่าปกติเล็กน้อย</p><p class="text-green-300 bg-green-500/10 p-3 rounded-xl border border-green-500/20"><strong class="text-green-400">🔄 บทบาทของ Pump:</strong> เป็นช่วงที่ <span class="text-white">Na<sup>+</sup>/K<sup>+</sup> Pump</span> โดดเด่นที่สุดในการดึงประจกลับสู่ -70 mV</p>`
+            }
+        ];
+
+        let scene, camera, renderer, controls;
+        let naDoor, kDoor, naIons = [], kIons = [], pumpIons = [];
+        let pumpMesh;
+        let targetNaOpen = 0, targetKOpen = 0, currentNaOpen = 0, currentKOpen = 0, pumpWorkFactor = 1;
+        let markerElements = [];
+        let curve, particle, pointerGroup, skinMat;
+
+        function init() {
+            const container = document.getElementById('three-canvas');
+            const wrapper = document.getElementById('simulator-container');
+            
+            scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x050510, 0.02);
+
+            camera = new THREE.PerspectiveCamera(50, wrapper.clientWidth / wrapper.clientHeight, 0.1, 1000);
+            const isMobile = window.innerWidth < 768;
+            camera.position.set(isMobile ? 14 : 12, 8, isMobile ? 38 : 30); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(wrapper.clientWidth, wrapper.clientHeight);
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+            const pLight = new THREE.PointLight(0xffaa00, 1.2, 100);
+            pLight.position.set(10, 20, 10);
+            scene.add(pLight);
+
+            setupGraphAndStimulus();
+            createIonSystem();
+
+            animate();
+        }
+
+        function setupGraphAndStimulus() {
+            const grid = new THREE.GridHelper(70, 40, 0x1e293b, 0x1e293b);
+            grid.position.y = -10; 
+            scene.add(grid);
+
+            // สร้าง Procedural Texture สำหรับผิวหนัง (รูขุมขน/ลายผิว)
+            const canvas = document.createElement('canvas');
+            canvas.width = 128; canvas.height = 128;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffccaa';
+            ctx.fillRect(0,0,128,128);
+            for(let i=0; i<200; i++) {
+                ctx.fillStyle = 'rgba(0,0,0,0.05)';
+                ctx.beginPath();
+                ctx.arc(Math.random()*128, Math.random()*128, Math.random()*2, 0, Math.PI*2);
+                ctx.fill();
+            }
+            const skinTex = new THREE.CanvasTexture(canvas);
+            skinTex.wrapS = skinTex.wrapT = THREE.RepeatWrapping;
+            skinTex.repeat.set(2, 2);
+
+            // ผิวหนังแบบ High Detail
+            const skinGroup = new THREE.Group();
+            
+            // ชั้น Epidermis (โค้งมนขึ้น)
+            const epiGeo = new THREE.BoxGeometry(6.2, 0.5, 6.2);
+            const epiMat = new THREE.MeshStandardMaterial({ 
+                map: skinTex,
+                bumpMap: skinTex,
+                bumpScale: 0.05,
+                color: 0xffccaa,
+                roughness: 0.7,
+                emissive: 0xff5500,
+                emissiveIntensity: 0
+            });
+            const epidermis = new THREE.Mesh(epiGeo, epiMat);
+            skinGroup.add(epidermis);
+            skinMat = epiMat;
+
+            // ชั้น Dermis (Texture มีความพรุนขึ้น)
+            const derGeo = new THREE.BoxGeometry(6, 1.4, 6);
+            const derMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff9988,
+                bumpMap: skinTex,
+                bumpScale: 0.1,
+                roughness: 0.9
+            });
+            const dermis = new THREE.Mesh(derGeo, derMat);
+            dermis.position.y = -0.9;
+            skinGroup.add(dermis);
+
+            // เพิ่มเส้นเลือด/เส้นประสาทจำลองในชั้นผิว
+            const nerveGeo = new THREE.CylinderGeometry(0.05, 0.05, 1.5);
+            const nerveMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00, emissiveIntensity: 0.5 });
+            for(let i=0; i<3; i++) {
+                const n = new THREE.Mesh(nerveGeo, nerveMat);
+                n.position.set((Math.random()-0.5)*4, -1, (Math.random()-0.5)*4);
+                n.rotation.z = Math.random();
+                skinGroup.add(n);
+            }
+
+            skinGroup.position.set(-20, -7.0, 0);
+            scene.add(skinGroup);
+
+            // สิ่งเร้า
+            pointerGroup = new THREE.Group();
+            pointerGroup.position.set(-20, -3, 0);
+            pointerGroup.add(new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.3, 2.5, 16), new THREE.MeshStandardMaterial({ color: 0x06b6d4 })));
+            pointerGroup.add(new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 16), new THREE.MeshStandardMaterial({ color: 0x06b6d4 })));
+            scene.add(pointerGroup);
+
+            // กราฟ
+            const pts = [
+                new THREE.Vector3(-20, -7.0, 0), new THREE.Vector3(-12, -7.0, 0.2), new THREE.Vector3(-8, -7.0, 0.5),   
+                new THREE.Vector3(-5, -5.5, 1), new THREE.Vector3(-3, -2.0, 1.5), new THREE.Vector3(-1.5, 1.0, 1.8),  
+                new THREE.Vector3(0, 3.5, 2), new THREE.Vector3(2, -2.0, 1), new THREE.Vector3(4, -8.5, -1),     
+                new THREE.Vector3(7, -7.0, 0), new THREE.Vector3(15, -7.0, 0)      
+            ];
+            curve = new THREE.CatmullRomCurve3(pts);
+            scene.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 100, 0.2, 8, false), new THREE.MeshStandardMaterial({ color: 0xff4400, emissive: 0x661100, emissiveIntensity: 1 })));
+
+            particle = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), new THREE.MeshBasicMaterial({ color: 0xffe600 }));
+            particle.add(new THREE.PointLight(0xffe600, 2, 10));
+            particle.visible = false;
+            scene.add(particle);
+
+            // Markers
+            const mContainer = document.getElementById('markers-container');
+            const mInfo = [{id:1, t:0.25}, {id:2, t:0.32}, {id:3, t:0.50}, {id:4, t:0.68}, {id:5, t:0.80}];
+            mInfo.forEach(info => {
+                const pt = curve.getPoint(info.t);
+                const ring = new THREE.Mesh(new THREE.RingGeometry(0.6, 0.85, 32), new THREE.MeshBasicMaterial({ color: 0xfbbf24, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }));
+                ring.position.copy(pt);
+                scene.add(ring);
+                const elem = document.createElement('div');
+                elem.className = 'marker';
+                elem.innerText = info.id;
+                elem.onclick = (e) => { e.stopPropagation(); showInfo(info.id, elem); };
+                mContainer.appendChild(elem);
+                markerElements.push({ domElement: elem, position3D: pt, ring: ring });
+            });
+        }
+
+        function createIonSystem() {
+            const systemGrp = new THREE.Group();
+            systemGrp.position.set(12, 4, -8);
+            scene.add(systemGrp);
+
+            // Membrane (ลิพิดไบเลเยอร์)
+            const memGeo = new THREE.BoxGeometry(18, 0.8, 8);
+            const memMat = new THREE.MeshStandardMaterial({ 
+                color: 0x334466, transparent: true, opacity: 0.9,
+                metalness: 0.3, roughness: 0.2
+            });
+            const mem = new THREE.Mesh(memGeo, memMat);
+            mem.position.y = -1.5;
+            systemGrp.add(mem);
+
+            // Na+ Channel (โปรตีนสมจริง)
+            const naChannel = new THREE.Group(); naChannel.position.x = -6; systemGrp.add(naChannel);
+            // โครงสร้างโปรตีนหยักๆ
+            const pPartGeo = new THREE.TorusGeometry(1, 0.3, 12, 24);
+            const pPartMat = new THREE.MeshStandardMaterial({ color: 0x0ea5e9, roughness: 0.3 });
+            const pPartTop = new THREE.Mesh(pPartGeo, pPartMat);
+            pPartTop.rotation.x = Math.PI/2; pPartTop.position.y = 0.5;
+            const pPartBottom = new THREE.Mesh(pPartGeo, pPartMat);
+            pPartBottom.rotation.x = Math.PI/2; pPartBottom.position.y = -0.5;
+            naChannel.add(pPartTop, pPartBottom);
+            
+            naDoor = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), new THREE.MeshStandardMaterial({ color: 0x38bdf8, emissive: 0x0ea5e9 }));
+            naDoor.position.y = 0; naChannel.add(naDoor);
+
+            // K+ Channel (โปรตีนสมจริง)
+            const kChannel = new THREE.Group(); kChannel.position.x = 6; systemGrp.add(kChannel);
+            const kPartMat = new THREE.MeshStandardMaterial({ color: 0xa855f7, roughness: 0.3 });
+            const kPartTop = new THREE.Mesh(pPartGeo, kPartMat);
+            kPartTop.rotation.x = Math.PI/2; kPartTop.position.y = 0.5;
+            const kPartBottom = new THREE.Mesh(pPartGeo, kPartMat);
+            kPartBottom.rotation.x = Math.PI/2; kPartBottom.position.y = -0.5;
+            kChannel.add(kPartTop, kPartBottom);
+
+            kDoor = new THREE.Mesh(new THREE.SphereGeometry(0.8, 32, 16), new THREE.MeshStandardMaterial({ color: 0xc084fc, emissive: 0xa855f7 }));
+            kDoor.position.y = 0; kChannel.add(kDoor);
+
+            // --- NA+/K+ Pump (Center) ---
+            pumpMesh = new THREE.Group();
+            pumpMesh.position.x = 0;
+            systemGrp.add(pumpMesh);
+            // Pump Base
+            const pBase = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.8, 2.5, 8), new THREE.MeshStandardMaterial({ color: 0xf59e0b }));
+            pumpMesh.add(pBase);
+            // Spin Decoration
+            const pDecor = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.1, 8, 24), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.4 }));
+            pDecor.rotation.x = Math.PI/2;
+            pumpMesh.add(pDecor);
+
+            // Leak Channels (Smaller ones)
+            const naLeak = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 12), new THREE.MeshStandardMaterial({color: 0x0ea5e9, transparent: true, opacity: 0.6}));
+            naLeak.position.set(-3, -1.5, 2); systemGrp.add(naLeak);
+            const kLeak = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1, 12), new THREE.MeshStandardMaterial({color: 0xa855f7, transparent: true, opacity: 0.6}));
+            kLeak.position.set(3, -1.5, 2); systemGrp.add(kLeak);
+
+            // All Ions
+            for(let i=0; i<30; i++) {
+                const nI = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({color: 0x0ea5e9}));
+                nI.visible = false; scene.add(nI);
+                naIons.push({mesh: nI, speed: 0.1 + Math.random()*0.1, active: false, type: 'channel'});
+                
+                const kI = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 8), new THREE.MeshBasicMaterial({color: 0xa855f7}));
+                kI.visible = false; scene.add(kI);
+                kIons.push({mesh: kI, speed: 0.1 + Math.random()*0.1, active: false, type: 'channel'});
+            }
+        }
+
+        let aTime = 0;
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            aTime += 0.003;
+            if (aTime > 1.3) aTime = 0;
+
+            // Stimulus Cycle
+            if (aTime < 0.1) pointerGroup.position.y = THREE.MathUtils.lerp(-3, -6.7, aTime / 0.1);
+            else if (aTime < 0.15) { pointerGroup.position.y = -6.7; skinMat.emissiveIntensity = 2; }
+            else if (aTime < 0.25) { pointerGroup.position.y = THREE.MathUtils.lerp(-6.7, -3, (aTime - 0.15) / 0.1); skinMat.emissiveIntensity = 0; }
+            else pointerGroup.position.y = -3;
+
+            // Signal Path
+            if (aTime >= 0.15 && aTime <= 1.15) {
+                particle.visible = true;
+                particle.position.copy(curve.getPoint((aTime - 0.15) / 1.0));
+            } else particle.visible = false;
+
+            // Gate Dynamics
+            currentNaOpen = THREE.MathUtils.lerp(currentNaOpen, targetNaOpen, 0.1);
+            currentKOpen = THREE.MathUtils.lerp(currentKOpen, targetKOpen, 0.1);
+            naDoor.rotation.x = -currentNaOpen * Math.PI / 1.5;
+            kDoor.rotation.x = -currentKOpen * Math.PI / 1.5;
+
+            // Pump Visuals
+            pumpMesh.rotation.y += 0.02 * pumpWorkFactor;
+            pumpMesh.scale.y = 1 + Math.sin(Date.now() * 0.005) * 0.05 * pumpWorkFactor;
+
+            // Ion Logic
+            naIons.forEach(ion => {
+                // Channel Flow
+                if(targetNaOpen > 0.1) {
+                    if(!ion.active) { ion.active = true; ion.mesh.visible = true; ion.mesh.position.set(6 + (Math.random()-0.5)*1.5, 10 + Math.random()*5, -8 + (Math.random()-0.5)*1.5); }
+                    ion.mesh.position.y -= ion.speed * 1.5;
+                    if(ion.mesh.position.y < 2) ion.active = false;
+                } 
+                // Pump Flow (Na+ Out)
+                else if (pumpWorkFactor > 0.5 && Math.random() > 0.95 && !ion.active) {
+                    ion.active = true; ion.mesh.visible = true; ion.mesh.position.set(12 + (Math.random()-0.5), 3, -8);
+                    ion.speed = 0.15;
+                    ion.flowType = 'pump-out';
+                }
+                
+                if (ion.flowType === 'pump-out' && ion.active) {
+                    ion.mesh.position.y += ion.speed;
+                    if(ion.mesh.position.y > 12) { ion.active = false; ion.flowType = ''; }
+                } else if (!targetNaOpen && !ion.flowType) ion.mesh.visible = false;
+            });
+
+            kIons.forEach(ion => {
+                if(targetKOpen > 0.1) {
+                    if(!ion.active) { ion.active = true; ion.mesh.visible = true; ion.mesh.position.set(18 + (Math.random()-0.5)*1.5, 3, -8 + (Math.random()-0.5)*1.5); }
+                    ion.mesh.position.y += ion.speed * 1.5;
+                    if(ion.mesh.position.y > 12) ion.active = false;
+                }
+                // Pump Flow (K+ In)
+                else if (pumpWorkFactor > 0.5 && Math.random() > 0.96 && !ion.active) {
+                    ion.active = true; ion.mesh.visible = true; ion.mesh.position.set(12 + (Math.random()-0.5), 10, -8);
+                    ion.speed = 0.12;
+                    ion.flowType = 'pump-in';
+                }
+
+                if (ion.flowType === 'pump-in' && ion.active) {
+                    ion.mesh.position.y -= ion.speed;
+                    if(ion.mesh.position.y < 3) { ion.active = false; ion.flowType = ''; }
+                } else if (!targetKOpen && !ion.flowType) ion.mesh.visible = false;
+            });
+
+            updateUI();
+            renderer.render(scene, camera);
+        }
+
+        function updateUI() {
+            const wrapper = document.getElementById('simulator-container');
+            const rect = wrapper.getBoundingClientRect();
+            const v = new THREE.Vector3();
+            
+            markerElements.forEach(m => {
+                v.copy(m.position3D).project(camera);
+                m.ring.lookAt(camera.position);
+                if (v.z > 1) { m.domElement.style.display = 'none'; return; }
+                m.domElement.style.display = 'flex';
+                m.domElement.style.left = `${(v.x * .5 + .5) * rect.width}px`;
+                m.domElement.style.top = `${(v.y * -.5 + .5) * rect.height}px`;
+            });
+
+            const sL = document.getElementById('stimulus-label');
+            const kL = document.getElementById('skin-label');
+            v.set(-20, -0.5, 0).project(camera);
+            if (v.z <= 1) { sL.style.display = 'block'; sL.style.left = `${(v.x * .5 + .5) * rect.width}px`; sL.style.top = `${(v.y * -.5 + .5) * rect.height}px`; }
+            else sL.style.display = 'none';
+            v.set(-20, -9, 0).project(camera);
+            if (v.z <= 1) { kL.style.display = 'block'; kL.style.left = `${(v.x * .5 + .5) * rect.width}px`; kL.style.top = `${(v.y * -.5 + .5) * rect.height}px`; }
+            else kL.style.display = 'none';
+        }
+
+        let currentM = null;
+        function showInfo(id, elem) {
+            if(currentM) currentM.classList.remove('active');
+            elem.classList.add('active'); currentM = elem;
+            const d = phasesData.find(x => x.id === id);
+            if(d) {
+                document.getElementById('info-number').innerText = d.id;
+                document.getElementById('info-title').innerText = d.title;
+                document.getElementById('info-mv').innerText = "VOLTAGE: " + d.mv;
+                document.getElementById('info-desc').innerHTML = d.desc;
+                document.getElementById('info-panel').classList.remove('hidden');
+                targetNaOpen = d.naGate;
+                targetKOpen = d.kGate;
+                pumpWorkFactor = d.pumpActive;
+            }
+        }
+
+        function closeInfo() {
+            document.getElementById('info-panel').classList.add('hidden');
+            if(currentM) currentM.classList.remove('active');
+            currentM = null; targetNaOpen = 0; targetKOpen = 0; pumpWorkFactor = 1;
+        }
+
+        window.addEventListener('resize', () => {
+            const w = document.getElementById('simulator-container');
+            camera.aspect = w.clientWidth / w.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(w.clientWidth, w.clientHeight);
+        });
+
+        init();
+    </script>
+</body>
+</html>
